@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,7 +26,8 @@
 <div id="root"></div>
 <script>
 const {
-  useState
+  useState,
+  useEffect
 } = React;
 const CREAM = "#F4F1EA";
 const INK = "#1A1A1A";
@@ -50,6 +52,100 @@ function Wordmark({
       lineHeight: 1
     }
   }, "beatrice");
+}
+function LockScreen({
+  onUnlock
+}) {
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+  async function tryUnlock() {
+    if (!pw.trim()) return;
+    setChecking(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          password: pw
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError("Wrong password. Try again.");
+        setChecking(false);
+        return;
+      }
+      onUnlock();
+    } catch (err) {
+      setError("Couldn't reach the server. Try again.");
+      setChecking(false);
+    }
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      background: CREAM,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0 24px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 28
+    }
+  }, /*#__PURE__*/React.createElement(Wordmark, {
+    size: 36
+  })), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: pw,
+    onChange: e => setPw(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Enter") tryUnlock();
+    },
+    placeholder: "Password",
+    autoFocus: true,
+    style: {
+      width: "100%",
+      maxWidth: 320,
+      padding: "14px 16px",
+      fontSize: 16,
+      fontFamily: "'Inter', sans-serif",
+      color: INK,
+      background: "#FFFFFF",
+      border: `0.5px solid ${LINE}`,
+      borderRadius: 4,
+      marginBottom: 14,
+      textAlign: "center"
+    }
+  }), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#712B13",
+      marginBottom: 14
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    onClick: tryUnlock,
+    disabled: !pw.trim() || checking,
+    style: {
+      width: "100%",
+      maxWidth: 320,
+      padding: "14px 0",
+      background: pw.trim() ? INK : "#C9C4B5",
+      color: CREAM,
+      border: "none",
+      borderRadius: 4,
+      fontFamily: "'Inter', sans-serif",
+      fontSize: 15,
+      fontWeight: 600,
+      cursor: pw.trim() ? "pointer" : "default"
+    }
+  }, checking ? "Checking…" : "Enter"));
 }
 function parseSortResponse(raw) {
   const result = {
@@ -362,10 +458,22 @@ function App() {
     }
   }, "New dump"))));
 }
-ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
+function Root() {
+  const [unlocked, setUnlocked] = useState(null);
+  useEffect(() => {
+    fetch("/api/check-session").then(res => res.json()).then(data => setUnlocked(!!data.unlocked)).catch(() => setUnlocked(false));
+  }, []);
+  if (unlocked === null) {
+    return null;
+  }
+  if (!unlocked) {
+    return React.createElement(LockScreen, {
+      onUnlock: () => setUnlocked(true)
+    });
+  }
+  return React.createElement(App, null);
+}
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(Root, null));
 </script>
 </body>
 </html>
-
-
-
