@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Beatrice" />
+<meta name="theme-color" content="#F4F1EA" />
+<title>Beatrice</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23F4F1EA'/%3E%3Ctext x='50' y='66' font-family='Georgia, serif' font-weight='bold' font-size='44' text-anchor='middle' fill='%231A1A1A'%3Eb%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; overscroll-behavior: none; background: #F4F1EA; }
+  body { font-family: 'Inter', -apple-system, sans-serif; color: #1A1A1A; min-height: 100vh; }
+  #root { min-height: 100vh; }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+const { useState } = React;
+
+const CREAM = "#F4F1EA";
+const INK = "#1A1A1A";
+const MUTED = "#8A8678";
+const LINE = "#DDD9CC";
+const RULE = "#C9C4B5";
+
+const CATEGORY_LABELS = {
+  "Stand-up bit": "Stand-up bit",
+  "Book chapter": "Book chapter",
+  "Substack": "Substack",
+};
+
+function Wordmark({ size = 40 }) {
+  return (
+    <div style={{
+      fontFamily: "'Old Standard TT', serif",
+      fontWeight: 700,
+      fontSize: size,
+      color: INK,
+      letterSpacing: "0.01em",
+      lineHeight: 1,
+    }}>
+      beatrice
+    </div>
+  );
+}
+
+function parseSortResponse(raw) {
+  const result = { category: "", alsoCouldBe: "", why: "", draft: "" };
+  const draftSplit = raw.split(/---\s*\n?DRAFT:/i);
+  const header = draftSplit[0] || raw;
+  result.draft = (draftSplit[1] || "").trim();
+
+  const catMatch = header.match(/CATEGORY:\s*(.+)/i);
+  const alsoMatch = header.match(/ALSO COULD BE:\s*(.+)/i);
+  const whyMatch = header.match(/WHY:\s*([\s\S]+)/i);
+
+  if (catMatch) result.category = catMatch[1].trim();
+  if (alsoMatch) result.alsoCouldBe = alsoMatch[1].trim();
+  if (whyMatch) result.why = whyMatch[1].split(/\n---/)[0].trim();
+
+  if (!result.category && !result.draft) {
+    result.draft = raw.trim();
+  }
+
+  return result;
+}
+
+function App() {
+  const [stage, setStage] = useState("entry");
+  const [textInput, setTextInput] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState("");
+  const [sortResult, setSortResult] = useState(null);
+  const [rawFallback, setRawFallback] = useState("");
+
+  function useTypedText() {
+    if (!textInput.trim()) return;
+    setTranscript(textInput.trim());
+    runSort(undefined, textInput.trim());
+  }
+
+  async function runSort(forceCategory, overrideText) {
+    setError("");
+    setStage("sorting");
+    setRawFallback("");
+    const textToSort = overrideText || transcript;
+
+    try {
+      const res = await fetch("/api/sort", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: textToSort, forceCategory: forceCategory || undefined }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setError(data.error || "Sorting failed. Try again?");
+        setStage("entry");
+        return;
+      }
+
+      const parsed = parseSortResponse(data.text || "");
+      if (!parsed.category && !parsed.draft) {
+        setRawFallback(data.text || "");
+      } else {
+        setSortResult(parsed);
+      }
+      setStage("result");
+    } catch (err) {
+      setError(`Something went wrong: ${err.message || "unknown error"}`);
+      setStage("entry");
+    }
+  }
+
+  function startOver() {
+    setStage("entry");
+    setTextInput("");
+    setTranscript("");
+    setError("");
+    setSortResult(null);
+    setRawFallback("");
+  }
+
+  function copyDraft() {
+    const text = sortResult?.draft || rawFallback;
+    if (text) navigator.clipboard.writeText(text);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: CREAM, display: "flex", flexDirection: "column" }}>
+
+      <div style={{ padding: "32px 24px 20px", display: "flex", justifyContent: "center" }}>
+        <Wordmark size={36} />
+      </div>
+
+      <div style={{ flex: 1, padding: "0 20px 40px", maxWidth: 520, margin: "0 auto", width: "100%" }}>
+
+        {error && (
+          <div style={{
+            background: "#FAECE7", border: "0.5px solid #D85A30", borderRadius: 4,
+            padding: "12px 16px", fontSize: 14, color: "#712B13", marginBottom: 20,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {stage === "entry" && (
+          <div>
+            <p style={{ fontSize: 15, color: MUTED, lineHeight: 1.6, marginBottom: 28, marginTop: 0 }}>
+              Dump the rant, or paste a transcript from Voice Memos. Beatrice will decide what it actually is, and start writing it.
+            </p>
+
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="Type it, or paste your transcript here. Don't clean it up."
+              style={{
+                width: "100%", minHeight: 280, padding: 16, fontSize: 16,
+                fontFamily: "'Inter', sans-serif", color: INK, background: "#FFFFFF",
+                border: `0.5px solid ${LINE}`, borderRadius: 4, resize: "vertical",
+                lineHeight: 1.6,
+              }}
+            />
+            <button
+              onClick={useTypedText}
+              disabled={!textInput.trim()}
+              style={{
+                marginTop: 16, width: "100%", padding: "14px 0",
+                background: textInput.trim() ? INK : "#C9C4B5",
+                color: CREAM, border: "none", borderRadius: 4,
+                fontFamily: "'Inter', sans-serif", fontSize: 15, fontWeight: 600,
+                cursor: textInput.trim() ? "pointer" : "default",
+              }}
+            >
+              Sort this
+            </button>
+          </div>
+        )}
+
+        {stage === "sorting" && (
+          <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <div style={{ fontSize: 15, color: MUTED }}>Reading it. Deciding what it is.</div>
+          </div>
+        )}
+
+        {stage === "result" && sortResult && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{
+                display: "inline-block", padding: "5px 12px", background: INK, color: CREAM,
+                borderRadius: 3, fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
+                textTransform: "uppercase", marginBottom: 12,
+              }}>
+                {sortResult.category}
+              </div>
+              {sortResult.alsoCouldBe && sortResult.alsoCouldBe.toLowerCase() !== "just this one" && (
+                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>
+                  Also could be: {sortResult.alsoCouldBe}
+                </div>
+              )}
+              {sortResult.why && (
+                <div style={{ fontSize: 14, color: "#5C5848", lineHeight: 1.6, fontStyle: "italic" }}>
+                  {sortResult.why}
+                </div>
+              )}
+            </div>
+
+            <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 20, marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: MUTED, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 12 }}>
+                Draft
+              </div>
+              <div style={{
+                background: "#FFFFFF", border: `0.5px solid ${LINE}`, borderRadius: 4,
+                padding: 20, fontSize: 16, lineHeight: 1.75, color: INK, whiteSpace: "pre-wrap",
+                fontFamily: "'Old Standard TT', serif",
+              }}>
+                {sortResult.draft}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <button
+                onClick={copyDraft}
+                style={{
+                  flex: 1, padding: "12px 0", background: INK, color: CREAM,
+                  border: "none", borderRadius: 4, fontFamily: "'Inter', sans-serif",
+                  fontSize: 14, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Copy draft
+              </button>
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 600, color: MUTED, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 10 }}>
+              Or draft it as
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 28, flexWrap: "wrap" }}>
+              {Object.keys(CATEGORY_LABELS)
+                .filter((c) => c !== sortResult.category)
+                .map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => runSort(c)}
+                    style={{
+                      padding: "9px 14px", background: "#FFFFFF", color: INK,
+                      border: `0.5px solid ${RULE}`, borderRadius: 4,
+                      fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+            </div>
+
+            <button
+              onClick={startOver}
+              style={{
+                width: "100%", padding: "12px 0", background: "none", color: MUTED,
+                border: `0.5px solid ${LINE}`, borderRadius: 4,
+                fontFamily: "'Inter', sans-serif", fontSize: 14, cursor: "pointer",
+              }}
+            >
+              New dump
+            </button>
+          </div>
+        )}
+
+        {stage === "result" && !sortResult && rawFallback && (
+          <div>
+            <div style={{
+              background: "#FFFFFF", border: `0.5px solid ${LINE}`, borderRadius: 4,
+              padding: 20, fontSize: 16, lineHeight: 1.75, color: INK, whiteSpace: "pre-wrap",
+              fontFamily: "'Old Standard TT', serif", marginBottom: 20,
+            }}>
+              {rawFallback}
+            </div>
+            <button
+              onClick={startOver}
+              style={{
+                width: "100%", padding: "12px 0", background: "none", color: MUTED,
+                border: `0.5px solid ${LINE}`, borderRadius: 4,
+                fontFamily: "'Inter', sans-serif", fontSize: 14, cursor: "pointer",
+              }}
+            >
+              New dump
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
