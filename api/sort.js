@@ -32,6 +32,20 @@ export default async function handler(req, res) {
     return;
   }
 
+  const sitePassword = process.env.BEATRICE_PASSWORD;
+  if (sitePassword) {
+    const cookieHeader = req.headers.cookie || "";
+    const hasValidSession = cookieHeader
+      .split(";")
+      .map((c) => c.trim())
+      .some((c) => c === `beatrice_session=${sitePassword}`);
+
+    if (!hasValidSession) {
+      res.status(401).json({ error: "Not signed in." });
+      return;
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY." });
